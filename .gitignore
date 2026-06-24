@@ -1,4 +1,12 @@
-# Godot 4+ specific ignores
-.godot/
+# Elixir / Mix
+_build/
+deps/
+*.ez
+
+# Burrito output
+burrito_out/
+
+# MSIX staging
+dist/
 
 .DS_Store
