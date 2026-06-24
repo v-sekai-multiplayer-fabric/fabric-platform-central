@@ -1,0 +1,169 @@
+# Build the fabric-platform-central MSIX using Burrito (single self-contained exe),
+# then chunk the exe into the fabric-casync-central CDN via desync and verify integrity.
+#
+# Secrets:
+#   FABRIC_PFX_BASE64 + FABRIC_PFX_PASSWORD — code-signing cert (optional; self-signs if absent)
+#   CDN_PUSH_TOKEN — PAT with Contents:write on fabric-casync-central (required for CDN publish)
+name: Release MSIX
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Four-part package version (e.g. 0.1.0.1 for dev, 0.1.0.0 for release)"
+        required: true
+        default: "0.1.0.1"
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    env:
+      FABRIC_PFX_BASE64: ${{ secrets.FABRIC_PFX_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+            semver="${tag#v}"
+            core="${semver%%-*}"
+            pre="${semver#${core}}"
+            build_n="${pre##*.}"
+            [ -z "$pre" ] && build_n=0
+            version="${core}.${build_n}"
+          else
+            version="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - name: Install Zig (required by Burrito)
+        uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: "0.14.0"
+
+      - name: Install deps
+        shell: bash
+        run: mix deps.get
+
+      - name: Build Burrito release (Windows x86_64)
+        shell: bash
+        env:
+          MIX_ENV: prod
+        run: mix release fabric_platform_central
+
+      - name: Import signing cert
+        if: ${{ env.FABRIC_PFX_BASE64 != '' }}
+        shell: bash
+        run: echo "$FABRIC_PFX_BASE64" | base64 -d > fabric.pfx
+
+      - name: Pack + sign MSIX
+        shell: pwsh
+        run: |
+          $burritoExe = "burrito_out\fabric_platform_central.exe"
+          $pfx = if (Test-Path fabric.pfx) {
+            @("-PfxPath","fabric.pfx","-PfxPassword","${{ secrets.FABRIC_PFX_PASSWORD }}")
+          } else { @() }
+          pwsh packaging/msix/pack.ps1 `
+            -BurritoExe $burritoExe `
+            -Version "${{ steps.ver.outputs.version }}" `
+            -OutDir dist `
+            @pfx
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fabric-platform-central-exe
+          path: burrito_out/fabric_platform_central.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fabric-platform-central-msix
+          path: dist/fabric-platform-central-*.msix
+
+      - name: Upload MSIX to GitHub Release
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload "${{ github.ref_name }}" dist/fabric-platform-central-*.msix --clobber
+
+  publish-cdn:
+    needs: build-msix
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
+    steps:
+      - name: Download Burrito exe
+        uses: actions/download-artifact@v4
+        with:
+          name: fabric-platform-central-exe
+          path: exe
+
+      - name: Install desync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.0.3 \
+            -R folbricht/desync \
+            -p "desync_1.0.3_linux_amd64.tar.gz" \
+            -D /tmp/desync
+          tar -xzf /tmp/desync/desync_1.0.3_linux_amd64.tar.gz -C /usr/local/bin desync
+          desync --version
+
+      - name: Chunk exe with desync
+        run: |
+          mkdir -p chunks/self/store
+          desync make \
+            --store chunks/self/store \
+            chunks/self/fabric-platform-central.caibx \
+            exe/fabric_platform_central.exe
+          echo "index: $(wc -c < chunks/self/fabric-platform-central.caibx) bytes"
+          echo "chunks: $(find chunks/self/store -name '*.cacnk' | wc -l)"
+
+      - name: Verify chunks with desync (gate)
+        run: |
+          tmp=$(mktemp)
+          desync extract \
+            --store chunks/self/store \
+            chunks/self/fabric-platform-central.caibx \
+            "$tmp"
+          diff <(sha256sum exe/fabric_platform_central.exe | awk '{print $1}') \
+               <(sha256sum "$tmp" | awk '{print $1}')
+          echo "desync round-trip verified"
+          rm "$tmp"
+
+      - name: Upload .caibx index to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            chunks/self/fabric-platform-central.caibx --clobber
+
+      - name: Push chunks to fabric-casync-central
+        env:
+          CDN_TOKEN: ${{ secrets.CDN_PUSH_TOKEN }}
+        run: |
+          git clone \
+            "https://x-access-token:${CDN_TOKEN}@github.com/v-sekai-multiplayer-fabric/fabric-casync-central.git" \
+            cdnrepo
+          mkdir -p cdnrepo/self/store
+          cp -r chunks/self/store/. cdnrepo/self/store/
+          git -C cdnrepo config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C cdnrepo config user.name "github-actions[bot]"
+          git -C cdnrepo add self/store/
+          git -C cdnrepo diff --cached --quiet || \
+            git -C cdnrepo commit -m "self chunks for ${{ github.ref_name }}"
+          git -C cdnrepo push
