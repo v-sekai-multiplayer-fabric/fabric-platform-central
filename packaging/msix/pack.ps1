@@ -2,14 +2,14 @@
   Pack and sign the fabric-platform-central MSIX from the Burrito-produced
   single executable. Requires Windows SDK (makeappx.exe, signtool.exe).
 
-  -BurritoExe  Path to the Burrito output exe (burrito_out/fabric_platform_central.exe)
+  -BurritoExe  Path to the Burrito output exe (burrito_out/windows/fabric_platform_central.exe)
   -Version     4-part version, e.g. 0.1.0.1
   -OutDir      Output directory (default dist)
   -Publisher   Identity Publisher matching signing cert subject (default CN=v-sekai)
   -PfxPath     Signing .pfx; omit to generate a self-signed TEST cert
   -PfxPassword .pfx password, if any
 
-  ex: pwsh packaging/msix/pack.ps1 -BurritoExe burrito_out/fabric_platform_central.exe -Version 0.1.0.1
+  ex: pwsh packaging/msix/pack.ps1 -BurritoExe burrito_out/windows/fabric_platform_central.exe -Version 0.1.0.1
 #>
 [CmdletBinding()]
 param(
