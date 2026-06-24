@@ -38,3 +38,39 @@ jobs:
       - run: mix compile --warnings-as-errors
       - run: mix format --check-formatted
       - run: mix test
+
+  build:
+    name: Burrito Windows exe
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+
+      - uses: goto-bus-stop/setup-zig@v2.2.1
+        with:
+          version: "0.15.2"
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-prod-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-prod-
+
+      - run: mix deps.get
+
+      - name: Build Burrito release (Windows x86_64)
+        env:
+          MIX_ENV: prod
+        run: mix release fabric_platform_central
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: fabric-platform-central-windows-exe
+          path: burrito_out/windows/fabric_platform_central.exe
