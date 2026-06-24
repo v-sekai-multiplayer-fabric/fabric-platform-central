@@ -74,7 +74,7 @@ jobs:
       - name: Pack + sign MSIX
         shell: pwsh
         run: |
-          $burritoExe = "burrito_out\fabric_platform_central.exe"
+          $burritoExe = "burrito_out\windows\fabric_platform_central.exe"
           $pfx = if (Test-Path fabric.pfx) {
             @("-PfxPath","fabric.pfx","-PfxPassword","${{ secrets.FABRIC_PFX_PASSWORD }}")
           } else { @() }
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: fabric-platform-central-exe
-          path: burrito_out/fabric_platform_central.exe
+          path: burrito_out/windows/fabric_platform_central.exe
 
       - uses: actions/upload-artifact@v5
         with:
