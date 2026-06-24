@@ -27,7 +27,7 @@ jobs:
     env:
       FABRIC_PFX_BASE64: ${{ secrets.FABRIC_PFX_BASE64 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Resolve version
         id: ver
@@ -84,12 +84,12 @@ jobs:
             -OutDir dist `
             @pfx
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: fabric-platform-central-exe
           path: burrito_out/fabric_platform_central.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: fabric-platform-central-msix
           path: dist/fabric-platform-central-*.msix
@@ -107,7 +107,7 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     steps:
       - name: Download Burrito exe
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: fabric-platform-central-exe
           path: exe
