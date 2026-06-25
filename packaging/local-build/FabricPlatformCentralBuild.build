@@ -1,0 +1,7 @@
+# Podman quadlet — builds the container image from the local Containerfile.
+# Copy this file and Containerfile to ~/.config/containers/systemd/
+# then run: systemctl --user daemon-reload
+
+[Build]
+ImageTag=localhost/fabric-platform-central-build:latest
+SetWorkingDirectory=/home/ernest.lee/.config/containers/systemd

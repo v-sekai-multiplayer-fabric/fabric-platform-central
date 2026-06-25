@@ -40,7 +40,7 @@ jobs:
       - run: mix test
 
   build:
-    name: Burrito Windows exe
+    name: Burrito Linux exe
     runs-on: ubuntu-latest
 
     steps:
@@ -57,20 +57,30 @@ jobs:
 
       - uses: actions/cache@v5
         with:
-          path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-prod-${{ hashFiles('mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-prod-
+          path: deps
+          key: ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-deps-
 
-      - run: mix deps.get
+      - name: Install deps
+        run: mix deps.get
 
-      - name: Build Burrito release (Windows x86_64)
+      - name: Build Burrito release (Linux x86_64)
         env:
           MIX_ENV: prod
         run: mix release fabric_platform_central
 
+      - name: Show burrito_out layout
+        run: find burrito_out -type f || true
+
+      - name: Verify Linux exe exists
+        run: |
+          if [ ! -f "burrito_out/fabric_platform_central_linux" ]; then
+            echo "ERROR: burrito_out/fabric_platform_central_linux not found"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v5
         with:
-          name: fabric-platform-central-windows-exe
-          path: burrito_out/windows/fabric_platform_central.exe
+          name: fabric-platform-central-linux-exe
+          path: burrito_out/fabric_platform_central_linux
+          if-no-files-found: error
