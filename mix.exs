@@ -34,12 +34,17 @@ defmodule FabricPlatformCentral.MixProject do
     [
       fabric_platform_central: [
         steps: [:assemble, &Burrito.wrap/1],
-        burrito: [
-          targets: [
-            windows: [os: :windows, cpu: :x86_64]
-          ]
-        ]
+        burrito: [targets: burrito_targets()]
       ]
     ]
+  end
+
+  defp burrito_targets do
+    windows = [windows: [os: :windows, cpu: :x86_64]]
+
+    case :os.type() do
+      {:win32, _} -> windows
+      _ -> [linux: [os: :linux, cpu: :x86_64]] ++ windows
+    end
   end
 end

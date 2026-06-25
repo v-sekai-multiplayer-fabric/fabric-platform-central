@@ -1,0 +1,12 @@
+FROM registry.fedoraproject.org/fedora:44
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        erlang elixir git 7zip \
+    && dnf clean all
+
+RUN curl -sSfL https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz \
+    | tar -xJ -C /opt && \
+    ln -s /opt/zig-x86_64-linux-0.15.2/zig /usr/local/bin/zig && \
+    zig version
+
+WORKDIR /build

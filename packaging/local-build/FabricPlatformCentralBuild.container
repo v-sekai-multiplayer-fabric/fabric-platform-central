@@ -1,0 +1,29 @@
+# Podman quadlet — runs the Burrito build as a oneshot on Fedora 44.
+# Produces burrito_out/fabric_platform_central_linux and
+#          burrito_out/fabric_platform_central_windows.exe
+#
+# Install:
+#   cp packaging/local-build/{Containerfile,FabricPlatformCentralBuild.*} \
+#      ~/.config/containers/systemd/
+#   systemctl --user daemon-reload
+#   systemctl --user start FabricPlatformCentralBuild
+#   journalctl --user -u FabricPlatformCentralBuild -f
+
+[Unit]
+Description=Build fabric-platform-central Burrito Linux + Windows exe
+After=FabricPlatformCentralBuild-build.service
+Requires=FabricPlatformCentralBuild-build.service
+
+[Container]
+Image=localhost/fabric-platform-central-build:latest
+Volume=/chibifire-vsk-2026w24/files/loot-action-vertical-slice/fabric-platform-central:/build:z
+WorkingDir=/build
+Environment=MIX_ENV=prod
+Exec=bash -c "mix deps.get && mix release fabric_platform_central --overwrite && ls -la burrito_out/"
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
