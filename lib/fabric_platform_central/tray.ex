@@ -7,10 +7,14 @@ defmodule FabricPlatformCentral.Tray do
   wxTaskBarIcon is part of OTP — no external dependency required.
   Events arrive as {:wx, id, obj, data, event} messages handled in handle_info/2.
 
+  On headless systems (no display server) :wx.new() raises; init/1 returns
+  :ignore so the supervisor skips this child without failing.
+
   Menu actions:
     1 — Update Client
     2 — Update Server
     3 — Update Self
+    4 — Open Install Folder
     99 — Quit
   """
   use GenServer
@@ -23,6 +27,7 @@ defmodule FabricPlatformCentral.Tray do
   @menu_update_client 1
   @menu_update_server 2
   @menu_update_self 3
+  @menu_open_folder 4
   @menu_quit 99
 
   def start_link(opts \\ []) do
@@ -31,16 +36,22 @@ defmodule FabricPlatformCentral.Tray do
 
   @impl true
   def init(_opts) do
-    wx_env = :wx.new()
-    tray = :wxTaskBarIcon.new()
+    try do
+      wx_env = :wx.new()
+      tray = :wxTaskBarIcon.new()
 
-    icon = load_icon()
-    :wxTaskBarIcon.setIcon(tray, icon, tooltip: ~c"Fabric Platform Central")
+      icon = load_icon()
+      :wxTaskBarIcon.setIcon(tray, icon, tooltip: ~c"Fabric Platform Central")
 
-    :wxTaskBarIcon.connect(tray, :taskbar_right_up)
-    :wxTaskBarIcon.connect(tray, :command_menu_selected)
+      :wxTaskBarIcon.connect(tray, :taskbar_right_up)
+      :wxTaskBarIcon.connect(tray, :command_menu_selected)
 
-    {:ok, %{wx_env: wx_env, tray: tray, icon: icon}}
+      {:ok, %{wx_env: wx_env, tray: tray, icon: icon}}
+    catch
+      :error, reason ->
+        Logger.warning("Tray unavailable (no display?): #{inspect(reason)}")
+        :ignore
+    end
   end
 
   @impl true
@@ -49,6 +60,8 @@ defmodule FabricPlatformCentral.Tray do
     :wxMenu.append(menu, @menu_update_client, ~c"Update Client")
     :wxMenu.append(menu, @menu_update_server, ~c"Update Server")
     :wxMenu.append(menu, @menu_update_self, ~c"Update Self")
+    :wxMenu.appendSeparator(menu)
+    :wxMenu.append(menu, @menu_open_folder, ~c"Open Install Folder")
     :wxMenu.appendSeparator(menu)
     :wxMenu.append(menu, @menu_quit, ~c"Quit")
     :wxTaskBarIcon.popupMenu(state.tray, menu)
@@ -76,6 +89,12 @@ defmodule FabricPlatformCentral.Tray do
     {:noreply, state}
   end
 
+  def handle_info({:wx, @menu_open_folder, _obj, _data, _event}, state) do
+    install_dir = Application.get_env(:fabric_platform_central, :install_dir)
+    open_folder(install_dir)
+    {:noreply, state}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
@@ -96,6 +115,16 @@ defmodule FabricPlatformCentral.Tray do
       icon
     else
       :wxNullIcon
+    end
+  end
+
+  defp open_folder(path) do
+    File.mkdir_p(path)
+
+    case :os.type() do
+      {:win32, _} -> System.cmd("explorer.exe", [path], stderr_to_stdout: true)
+      {:unix, :darwin} -> System.cmd("open", [path], stderr_to_stdout: true)
+      {:unix, _} -> System.cmd("xdg-open", [path], stderr_to_stdout: true)
     end
   end
 
