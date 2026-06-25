@@ -42,6 +42,8 @@ jobs:
   build:
     name: Burrito Linux exe
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v5
@@ -69,18 +71,24 @@ jobs:
           MIX_ENV: prod
         run: mix release fabric_platform_central
 
-      - name: Show burrito_out layout
-        run: find burrito_out -type f || true
-
       - name: Verify Linux exe exists
         run: |
-          if [ ! -f "burrito_out/fabric_platform_central_linux" ]; then
-            echo "ERROR: burrito_out/fabric_platform_central_linux not found"
+          exe=burrito_out/fabric_platform_central_linux
+          if [ ! -f "$exe" ]; then
+            echo "ERROR: $exe not found"
             exit 1
           fi
+          size=$(stat -c%s "$exe")
+          sha=$(sha256sum "$exe" | awk '{print $1}')
+          echo "### Linux exe built" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| file | \`fabric_platform_central_linux\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| size | $size bytes |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| sha256 | \`$sha\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v5
-        with:
-          name: fabric-platform-central-linux-exe
-          path: burrito_out/fabric_platform_central_linux
-          if-no-files-found: error
+      - name: Attach Linux exe to GitHub Release
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" burrito_out/fabric_platform_central_linux --clobber
